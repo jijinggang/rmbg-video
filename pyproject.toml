@@ -38,8 +38,8 @@ dependencies = [
 rmbg-video = "rmbg_video.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/aiprojects/rmbg"
-Repository = "https://github.com/aiprojects/rmbg"
+Homepage = "https://github.com/jijinggang/rmbg-video"
+Repository = "https://github.com/jijinggang/rmbg-video"
 
 [tool.setuptools.packages.find]
 include = ["rmbg_video*"]

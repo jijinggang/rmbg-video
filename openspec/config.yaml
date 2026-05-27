@@ -1,0 +1,33 @@
+schema: spec-driven
+context: |
+  语言：中文（简体）
+  所有产出物必须用简体中文撰写。
+  所有生产代码必须有对应的测试,测试代码注释中标出对应的Spec/Scenario
+rules:
+  specs:
+    - 每个场景必须可独立测试
+  design:
+    - 必须指定精确的测试文件路径
+    - 必须指定每个文件的测试策略
+  tasks:
+    - 每个任务是且仅是一个 TDD 阶段（RED / GREEN / REFACTOR）
+    - 任务严格交替 RED → GREEN →（可选 REFACTOR）
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours

@@ -34,6 +34,7 @@ class TestParseArgs:
         assert args.no_audio is False
         assert args.no_alpha is False
         assert args.no_gpu is False
+        assert args.test is False
 
     def test_output_specified(self, monkeypatch):
         """Scenario: 保留用户指定输出路径"""
@@ -60,6 +61,7 @@ class TestParseArgs:
             "--no-audio",
             "--no-alpha",
             "--no-gpu",
+            "--test",
         ])
         from rmbg_video import parse_args
         args = parse_args()
@@ -76,6 +78,7 @@ class TestParseArgs:
         assert args.no_audio is True
         assert args.no_alpha is True
         assert args.no_gpu is True
+        assert args.test is True
 
 
 class TestCheckFfmpeg:

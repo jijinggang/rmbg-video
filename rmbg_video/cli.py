@@ -49,6 +49,8 @@ def parse_args(argv=None):
                         help="ffmpeg 可执行文件路径")
     parser.add_argument("--no-gpu", action="store_true",
                         help="强制使用 CPU")
+    parser.add_argument("--test", action="store_true",
+                        help="测试模式：只处理前5帧")
 
     return parser.parse_args(argv)
 
@@ -114,7 +116,7 @@ def process_video(ffmpeg_path, input_video, output_video, session,
                   width, height, fps, alpha_matting=True,
                   post_process_mask=False,
                   fg_threshold=240, bg_threshold=10, erode_size=10,
-                  crf=10, speed="good", alpha=True):
+                  crf=10, speed="good", alpha=True, max_frames=None):
     """核心管道：解码帧 → rembg 处理 → 编码输出"""
     import rembg
     from tqdm import tqdm
@@ -176,6 +178,8 @@ def process_video(ffmpeg_path, input_video, output_video, session,
             encoder.stdin.write(result.tobytes())
             frameno += 1
             pbar.update(1)
+            if max_frames is not None and frameno >= max_frames:
+                break
     finally:
         pbar.close()
         decoder.stdout.close()
@@ -265,6 +269,7 @@ def main():
             crf=args.crf,
             speed=args.speed,
             alpha=not args.no_alpha,
+            max_frames=5 if args.test else None,
         )
 
         # 阶段 3：混流音频

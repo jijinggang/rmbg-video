@@ -37,6 +37,9 @@ rmbg-video input.mp4 --no-gpu
 
 # 保留临时文件用于调试
 rmbg-video input.mp4 --keep-temp
+
+# 测试模式：只处理前5帧（快速预览效果）
+rmbg-video input.mp4 --test
 ```
 
 ## 选项
@@ -56,6 +59,7 @@ rmbg-video input.mp4 --keep-temp
 | `--keep-temp` | 否 | 保留临时文件用于调试 |
 | `--ffmpeg-path` | 自动检测 | ffmpeg 可执行文件路径 |
 | `--no-gpu` | 否 | 强制使用 CPU |
+| `--test` | 否 | 测试模式：只处理前5帧 |
 
 ## 工作原理
 

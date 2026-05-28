@@ -21,8 +21,8 @@ def parse_args(argv=None):
     parser.add_argument("input", help="输入视频路径")
     parser.add_argument("output", nargs="?", default=None, help="输出视频路径（默认：输入文件名 + .webm）")
 
-    parser.add_argument("--model", default="isnet-general-use",
-                        help="rembg 模型名（默认: isnet-general-use）")
+    parser.add_argument("--model", default="birefnet-general",
+                        help="rembg 模型名（默认: birefnet-general）")
     parser.add_argument("--no-alpha-matting", action="store_true",
                         help="禁用 alpha matting（更快但边缘较硬）")
     parser.add_argument("--fg-threshold", type=int, default=240,

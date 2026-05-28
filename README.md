@@ -43,7 +43,7 @@ rmbg-video input.mp4 --keep-temp
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| `--model` | `isnet-general-use` | rembg 模型名 |
+| `--model` | `birefnet-general` | rembg 模型名 |
 | `--no-alpha-matting` | 否 | 禁用 alpha matting（更快但边缘较硬） |
 | `--fg-threshold` | `240` | 前景阈值 |
 | `--bg-threshold` | `10` | 背景阈值 |

@@ -21,7 +21,7 @@ class TestParseArgs:
         args = parse_args()
         assert args.input == "input.mp4"
         assert args.output is None
-        assert args.model == "isnet-general-use"
+        assert args.model == "birefnet-general"
         assert args.no_alpha_matting is False
         assert args.fg_threshold == 240
         assert args.bg_threshold == 10
@@ -205,7 +205,7 @@ class TestNewSession:
             return object()
         monkeypatch.setattr(rembg, "new_session", mock_new_session)
         session = create_session(args)
-        assert calls == ["isnet-general-use"]
+        assert calls == ["birefnet-general"]
 
     def test_custom_model(self, monkeypatch):
         """Scenario: 显式指定模型名"""

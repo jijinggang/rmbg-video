@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rmbg-video"
-version = "1.0.0"
+version = "1.0.1"
 description = "绿幕视频背景扣除 CLI 工具 — 使用 rembg AI 模型逐帧去除视频背景，输出带透明通道的 VP8 WebM 视频"
 readme = "README.md"
 license = {text = "MIT"}

@@ -204,16 +204,7 @@ def create_interface():
                         label="测试模式（仅处理前 5 帧）",
                         value=PARAM_DEFAULTS["test"],
                     )
-                    model = gr.Dropdown(
-                        label="模型",
-                        choices=["birefnet-general", "u2net", "isnet-general-use", "sam"],
-                        value=PARAM_DEFAULTS["model"],
-                    )
-                    speed = gr.Radio(
-                        label="编码速度",
-                        choices=["good", "best", "realtime"],
-                        value=PARAM_DEFAULTS["speed"],
-                    )
+
 
                 with gr.Accordion("视频编码", open=False):
                     crf = gr.Slider(
@@ -256,6 +247,16 @@ def create_interface():
                     )
 
                 with gr.Accordion("高级选项", open=False):
+                    model = gr.Dropdown(
+                        label="模型",
+                        choices=["birefnet-general", "u2net", "isnet-general-use", "sam"],
+                        value=PARAM_DEFAULTS["model"],
+                    )
+                    speed = gr.Radio(
+                        label="编码速度",
+                        choices=["good", "best", "realtime"],
+                        value=PARAM_DEFAULTS["speed"],
+                    )
                     no_gpu = gr.Checkbox(
                         label="强制使用 CPU",
                         value=PARAM_DEFAULTS["no_gpu"],

@@ -16,3 +16,12 @@ from rmbg_video.cli import (
     parse_args,
     process_video,
 )
+
+from rmbg_video.web import (
+    check_ffmpeg_web,
+    check_gpu_web,
+    process_video_web,
+    validate_upload,
+    create_interface,
+    PARAM_DEFAULTS,
+)

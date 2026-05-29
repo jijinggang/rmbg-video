@@ -15,6 +15,8 @@ pip install rmbg-video
 
 ## 使用方式
 
+### 命令行
+
 ```bash
 # 基本用法
 rmbg-video input.mp4
@@ -41,6 +43,26 @@ rmbg-video input.mp4 --keep-temp
 # 测试模式：只处理前5帧（快速预览效果）
 rmbg-video input.mp4 --test
 ```
+
+### Web 界面
+
+启动 Web 服务后，团队成员可通过浏览器上传视频、配置参数并预览处理结果。处理任务自动排队，单 GPU 串行执行。
+
+```bash
+# 启动 Web 服务
+rmbg-video-web
+
+# 或通过 Python 模块启动
+python -m rmbg_video.web
+```
+
+启动后访问 `http://localhost:7860`，界面功能：
+
+- **上传视频** — 支持 .mp4 / .webm / .mov / .avi / .mkv 格式
+- **参数配置** — 所有 CLI 参数均可通过界面调整，测试模式（仅处理前 5 帧）快捷开关位于最前
+- **排队处理** — 多人同时提交时自动排队，显示队列状态，单任务串行处理
+- **透明预览** — 结果视频以灰色棋盘格为背景预览，直观查看透明通道效果
+- **下载结果** — 处理完成后可直接下载 WebM 视频
 
 ## 选项
 

@@ -90,6 +90,18 @@ python -m rmbg_video.web
 3. 通过 ffmpeg 管道编码为 VP8 + yuva420p 像素格式（支持透明通道）
 4. 提取原音频为 Opus 编码，与视频流合并输出最终 WebM
 
+## GPU配置相关
+
+- 用的是cuda12.8版本
+
+- 要卸载 onnxruntime
+  - uv python -m pip uninstall onnxruntime onnxruntime-gpu onnxruntime-azure -y
+  - uv pip install onnxruntime-gpu  
+- 安装cuda
+- 安装cudnn
+- 根据错误提示把`C:\Program Files\NVIDIA\CUDNN\v9.23\bin\12.9\x64`,`E:\AI\rmbg-video\.venv\Lib\site-packages\tensorrt_libs` 等dll所在路径加入到系统path中
+- uv pip install tensorrt-cu12==10.9.0.34
+
 ## 许可证
 
 MIT

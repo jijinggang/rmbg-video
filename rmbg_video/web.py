@@ -89,6 +89,23 @@ CHECKERBOARD_CSS = """
 }
 """
 
+# 模型 session 缓存：{(model, no_gpu): session}
+_session_cache = {}
+
+
+def get_or_create_session(model="birefnet-general", no_gpu=False):
+    """获取或创建 rembg session，缓存复用避免重复加载模型。"""
+    import argparse
+    from rmbg_video.cli import create_session
+
+    cache_key = (model, no_gpu)
+    if cache_key not in _session_cache:
+        print(f"加载模型 '{model}'（首次加载约需数秒）...")
+        args = argparse.Namespace(model=model, no_gpu=no_gpu)
+        _session_cache[cache_key] = create_session(args)
+        print(f"模型 '{model}' 加载完成，已缓存")
+    return _session_cache[cache_key]
+
 
 def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
                        model="birefnet-general", alpha_matting=True,
@@ -102,17 +119,13 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
     extract_audio, mux_audio。独立管理每个任务的临时目录。
     """
     import tempfile
-    import argparse
-    from rmbg_video.cli import get_video_info, create_session
+    from rmbg_video.cli import get_video_info
     from rmbg_video.cli import process_video as cli_process_video
     from rmbg_video.cli import extract_audio, mux_audio
 
     width, height, fps, has_audio = get_video_info(ffprobe_path, input_video)
 
-    args = argparse.Namespace(
-        model=model, no_gpu=no_gpu,
-    )
-    session = create_session(args)
+    session = get_or_create_session(model=model, no_gpu=no_gpu)
 
     os.makedirs(os.path.dirname(output_video) or ".", exist_ok=True)
     temp_dir = tempfile.mkdtemp(prefix="rmbg_web_")

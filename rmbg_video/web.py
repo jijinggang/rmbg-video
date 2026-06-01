@@ -41,7 +41,7 @@ def check_gpu_web():
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".m4v", ".flv", ".wmv"}
 
 PARAM_DEFAULTS = {
-    "model": "birefnet-general",
+    "model": "bria-rmbg",
     "alpha_matting": True,
     "fg_threshold": 240,
     "bg_threshold": 10,
@@ -262,7 +262,7 @@ def create_interface():
                 with gr.Accordion("高级选项", open=False):
                     model = gr.Dropdown(
                         label="模型",
-                        choices=["birefnet-general", "u2net", "isnet-general-use", "sam"],
+                        choices=["bria-rmbg", "birefnet-general", "u2net", "isnet-general-use", "sam"],
                         value=PARAM_DEFAULTS["model"],
                     )
                     speed = gr.Radio(

@@ -95,7 +95,7 @@ python -m rmbg_video.web
 - 用的是cuda12.8版本
 
 - 要卸载 onnxruntime
-  - uv python -m pip uninstall onnxruntime onnxruntime-gpu onnxruntime-azure -y
+  - uv pip uninstall onnxruntime onnxruntime-gpu onnxruntime-azure -y
   - uv pip install onnxruntime-gpu  
 - 安装cuda
 - 安装cudnn

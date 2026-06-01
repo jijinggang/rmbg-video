@@ -5,12 +5,10 @@ rmbg_video - 绿幕视频背景扣除 CLI 工具
 """
 import argparse
 import json
-import numpy as np
 import os
 import shutil
 import subprocess
 import sys
-import threading
 
 
 def parse_args(argv=None):
@@ -123,83 +121,90 @@ def process_video(ffmpeg_path, input_video, output_video, session,
                   fg_threshold=240, bg_threshold=10, erode_size=10,
                   crf=10, speed="good", alpha=True, max_frames=None,
                   cancel_event=None):
-    """核心管道：解码帧 → rembg 处理 → 编码输出"""
+    """帧提取到磁盘 → rembg 批量处理 → ffmpeg 合成视频"""
     import rembg
+    import tempfile
     from tqdm import tqdm
 
-    frame_size = width * height * 4
+    if cancel_event is not None and cancel_event.is_set():
+        raise ProcessingCancelled()
 
-    # 解码管道：输入视频 → 原始 RGBA 帧 → stdout
-    decoder_cmd = [
-        ffmpeg_path, "-y",
-        "-i", input_video,
-        "-f", "rawvideo",
-        "-pix_fmt", "rgba",
-        "-s", f"{width}x{height}",
-        "-r", str(fps),
-        "pipe:stdout",
-    ]
-    decoder = subprocess.Popen(decoder_cmd, stdout=subprocess.PIPE,
-                               stderr=subprocess.DEVNULL, bufsize=10**8)
-
-    # 编码管道：stdin → 原始 RGBA 帧 → VP8 WebM
-    pix_fmt = "yuva420p" if alpha else "yuv420p"
-    encoder_cmd = [
-        ffmpeg_path, "-y",
-        "-f", "rawvideo", "-vcodec", "rawvideo",
-        "-s", f"{width}x{height}",
-        "-pix_fmt", "rgba",
-        "-r", str(fps),
-        "-i", "pipe:stdin",
-        "-c:v", "libvpx",
-        "-pix_fmt", pix_fmt,
-        "-auto-alt-ref", "0",
-        "-crf", str(crf),
-        "-b:v", "0",
-        "-deadline", speed,
-        output_video,
-    ]
-    encoder = subprocess.Popen(encoder_cmd, stdin=subprocess.PIPE,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               bufsize=10**8)
+    temp_dir = tempfile.mkdtemp(prefix="rmbg_frames_")
+    src_dir = os.path.join(temp_dir, "src")
+    dest_dir = os.path.join(temp_dir, "dest")
+    os.makedirs(src_dir)
+    os.makedirs(dest_dir)
 
     frameno = 0
-    pbar = tqdm(unit="帧", desc="处理中")
 
     try:
-        while True:
-            if cancel_event is not None and cancel_event.is_set():
-                print("检测到取消信号，正在终止处理...")
-                decoder.kill()
-                encoder.kill()
-                decoder.stdout.close()
-                encoder.stdin.close()
-                raise ProcessingCancelled()
+        # 阶段 1：ffmpeg 提取帧到 src/ 目录
+        extract_cmd = [
+            ffmpeg_path, "-y",
+            "-i", input_video,
+            "-r", str(fps),
+            "-s", f"{width}x{height}",
+        ]
+        if max_frames is not None:
+            extract_cmd += ["-vframes", str(max_frames)]
+        extract_cmd.append(os.path.join(src_dir, "%08d.png"))
 
-            raw = decoder.stdout.read(frame_size)
-            if len(raw) < frame_size:
-                break
-            frame = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 4)
-            result = rembg.remove(
-                frame,
-                session=session,
-                alpha_matting=alpha_matting,
-                alpha_matting_foreground_threshold=fg_threshold,
-                alpha_matting_background_threshold=bg_threshold,
-                alpha_matting_erode_size=erode_size,
-                post_process_mask=post_process_mask,
-            )
-            encoder.stdin.write(result.tobytes())
-            frameno += 1
-            pbar.update(1)
-            if max_frames is not None and frameno >= max_frames:
-                break
+        subprocess.run(extract_cmd, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # 阶段 2：rembg 逐张处理 src/ → dest/
+        frame_files = sorted(f for f in os.listdir(src_dir) if f.endswith(".png"))
+        pbar = tqdm(frame_files, unit="帧", desc="处理中")
+
+        try:
+            for fname in pbar:
+                if cancel_event is not None and cancel_event.is_set():
+                    print("检测到取消信号，正在终止处理...")
+                    raise ProcessingCancelled()
+
+                src_path = os.path.join(src_dir, fname)
+                dest_path = os.path.join(dest_dir, fname)
+
+                with open(src_path, "rb") as f:
+                    frame_bytes = f.read()
+
+                result = rembg.remove(
+                    frame_bytes,
+                    session=session,
+                    alpha_matting=alpha_matting,
+                    alpha_matting_foreground_threshold=fg_threshold,
+                    alpha_matting_background_threshold=bg_threshold,
+                    alpha_matting_erode_size=erode_size,
+                    post_process_mask=post_process_mask,
+                )
+
+                with open(dest_path, "wb") as f:
+                    f.write(result)
+
+                frameno += 1
+        finally:
+            pbar.close()
+
+        # 阶段 3：ffmpeg 从 dest/ 合成视频
+        if frameno > 0:
+            pix_fmt = "yuva420p" if alpha else "yuv420p"
+            encode_cmd = [
+                ffmpeg_path, "-y",
+                "-r", str(fps),
+                "-i", os.path.join(dest_dir, "%08d.png"),
+                "-c:v", "libvpx",
+                "-pix_fmt", pix_fmt,
+                "-auto-alt-ref", "0",
+                "-crf", str(crf),
+                "-b:v", "0",
+                "-deadline", speed,
+                output_video,
+            ]
+            subprocess.run(encode_cmd, check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     finally:
-        pbar.close()
-        decoder.stdout.close()
-        encoder.stdin.close()
-        decoder.wait()
-        encoder.wait()
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
     print(f"处理完成：{frameno} 帧")
 

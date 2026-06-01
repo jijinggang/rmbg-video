@@ -866,3 +866,121 @@ class TestMainOrchestration:
             if proc.poll() is None:
                 proc.terminate()
         assert len(terminate_calls) == 1
+
+
+# === Task: 取消处理 ===
+# specs: cancel-processing / cancel_event未设置时正常处理, cancel_event已设置时抛出异常,
+#        CLI模式兼容
+
+class TestProcessingCancelled:
+    """ProcessingCancelled 异常类测试"""
+
+    def test_exception_is_defined(self):
+        """Scenario: ProcessingCancelled 异常类可导入且继承自 Exception"""
+        from rmbg_video import ProcessingCancelled
+        assert issubclass(ProcessingCancelled, Exception)
+
+    def test_exception_can_be_raised_and_caught(self):
+        """Scenario: ProcessingCancelled 可被抛出和捕获"""
+        from rmbg_video import ProcessingCancelled
+        with pytest.raises(ProcessingCancelled, match="测试取消"):
+            raise ProcessingCancelled("测试取消")
+
+
+class TestProcessVideoCancel:
+    """process_video 取消行为测试"""
+
+    def test_cancel_during_processing(self, monkeypatch):
+        """Scenario: 处理期间设置 cancel_event → 抛出 ProcessingCancelled"""
+        import numpy as np
+        import rembg
+        import tqdm
+        import threading
+
+        monkeypatch.setattr(rembg, "remove", lambda data, **kwargs: data)
+        monkeypatch.setattr(tqdm, "tqdm", lambda **kw: FakePbar())
+        monkeypatch.setattr(sys, "argv", ["rmbg_video.py", "input.mp4"])
+
+        frame = np.zeros((480, 640, 4), dtype=np.uint8)
+        frame_data = frame.tobytes() * 1000  # 足够多帧确保 timer 有时间触发
+
+        def capture_popen(cmd, **kwargs):
+            if kwargs.get("stdin") == subprocess.PIPE:
+                return MockPopen(cmd, stdin=BytesIOBuffer())
+            return MockPopen(cmd, stdout=BytesIOBuffer(frame_data))
+
+        monkeypatch.setattr(subprocess, "Popen", capture_popen)
+
+        from rmbg_video import parse_args, process_video, ProcessingCancelled
+        args = parse_args()
+        cancel_event = threading.Event()
+
+        def delayed_cancel():
+            cancel_event.set()
+
+        timer = threading.Timer(0.001, delayed_cancel)
+        timer.start()
+
+        session = object()
+        try:
+            with pytest.raises(ProcessingCancelled):
+                process_video("ffmpeg", args.input, "/tmp/out.webm", session,
+                              640, 480, 30.0, cancel_event=cancel_event)
+        finally:
+            timer.cancel()
+
+    def test_cancel_before_processing(self, monkeypatch):
+        """Scenario: 处理前已设置 cancel_event → 立即抛出 ProcessingCancelled"""
+        import numpy as np
+        import rembg
+        import tqdm
+        import threading
+
+        monkeypatch.setattr(rembg, "remove", lambda data, **kwargs: data)
+        monkeypatch.setattr(tqdm, "tqdm", lambda **kw: FakePbar())
+        monkeypatch.setattr(sys, "argv", ["rmbg_video.py", "input.mp4"])
+
+        frame_data = np.zeros(FRAME_SIZE, dtype=np.uint8).tobytes()
+
+        def capture_popen(cmd, **kwargs):
+            if kwargs.get("stdin") == subprocess.PIPE:
+                return MockPopen(cmd, stdin=BytesIOBuffer())
+            return MockPopen(cmd, stdout=BytesIOBuffer(frame_data))
+
+        monkeypatch.setattr(subprocess, "Popen", capture_popen)
+
+        from rmbg_video import parse_args, process_video, ProcessingCancelled
+        args = parse_args()
+        cancel_event = threading.Event()
+        cancel_event.set()
+
+        session = object()
+        with pytest.raises(ProcessingCancelled):
+            process_video("ffmpeg", args.input, "/tmp/out.webm", session,
+                          640, 480, 30.0, cancel_event=cancel_event)
+
+    def test_no_cancel_event_passed(self, monkeypatch):
+        """Scenario: 未传 cancel_event（CLI 模式）→ 正常完成不抛异常"""
+        import numpy as np
+        import rembg
+        import tqdm
+
+        monkeypatch.setattr(rembg, "remove", lambda data, **kwargs: data)
+        monkeypatch.setattr(tqdm, "tqdm", lambda **kw: FakePbar())
+        monkeypatch.setattr(sys, "argv", ["rmbg_video.py", "input.mp4"])
+
+        frame_data = np.zeros(FRAME_SIZE, dtype=np.uint8).tobytes()
+
+        def capture_popen(cmd, **kwargs):
+            if kwargs.get("stdin") == subprocess.PIPE:
+                return MockPopen(cmd, stdin=BytesIOBuffer())
+            return MockPopen(cmd, stdout=BytesIOBuffer(frame_data))
+
+        monkeypatch.setattr(subprocess, "Popen", capture_popen)
+
+        from rmbg_video import parse_args, process_video
+        args = parse_args()
+        session = object()
+        # 应无异常完成
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session,
+                      640, 480, 30.0)

@@ -5,6 +5,9 @@ rmbg_video - Gradio Web 界面
 """
 import os
 import shutil
+import threading
+
+import gradio as gr
 
 
 def check_ffmpeg_web(ffmpeg_path=None):
@@ -55,6 +58,11 @@ PARAM_DEFAULTS = {
     "no_gpu": False,
 }
 
+# 当前活动的取消事件和所属会话，由 handle_submit 设置，cancel_processing 消费。
+# concurrency_limit=1 确保同一时间只有一个处理在进行。
+_current_cancel_event = None   # threading.Event | None
+_active_session_hash = None     # str | None
+
 
 def validate_upload(file_path):
     """校验上传文件是否有效。返回 True/False。"""
@@ -64,6 +72,16 @@ def validate_upload(file_path):
         return False
     ext = os.path.splitext(file_path)[1].lower()
     return ext in VIDEO_EXTENSIONS
+
+
+def cancel_processing(request: gr.Request):
+    """取消按钮事件处理：仅允许创建任务的会话取消自己的处理。"""
+    global _current_cancel_event, _active_session_hash
+    if _current_cancel_event is None:
+        gr.Info("当前没有正在进行的处理")
+    elif _active_session_hash == request.session_hash:
+        _current_cancel_event.set()
+        gr.Info("取消信号已发送，正在终止处理...")
 
 
 CHECKERBOARD_CSS = """
@@ -112,7 +130,7 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
                        fg_threshold=240, bg_threshold=10, erode_size=10,
                        post_process_mask=False, crf=10, speed="good",
                        alpha=True, no_audio=False, test=False, no_gpu=False,
-                       progress=None):
+                       cancel_event=None, progress=None):
     """Web 端视频处理入口：编排 CLI 函数调用并管理临时文件。
 
     复用 rmbg_video.cli 中的 get_video_info, create_session, process_video,
@@ -150,6 +168,7 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
             speed=speed,
             alpha=alpha,
             max_frames=max_frames,
+            cancel_event=cancel_event,
         )
 
         if audio_path:
@@ -169,32 +188,49 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
 
 def handle_submit(input_video, model, alpha_matting, fg_threshold,
                   bg_threshold, erode_size, post_process_mask,
-                  crf, speed, no_alpha, no_audio, test_mode, no_gpu):
+                  crf, speed, no_alpha, no_audio, test_mode, no_gpu,
+                  request: gr.Request):
     """Gradio 事件处理器：校验输入、准备路径、调用 process_video_web。"""
     import tempfile
     import gradio as gr
+    from rmbg_video.cli import ProcessingCancelled
 
-    if not validate_upload(input_video):
-        raise gr.Error("请先上传一个有效的视频文件（支持 .mp4, .webm, .mov, .avi, .mkv）")
+    global _current_cancel_event, _active_session_hash
 
-    ffmpeg_path, ffprobe_path = check_ffmpeg_web()
-    if not ffmpeg_path:
-        raise gr.Error("服务器未找到 ffmpeg，请联系管理员")
+    cancel_event = threading.Event()
+    _current_cancel_event = cancel_event
+    _active_session_hash = request.session_hash
 
-    output_path = os.path.join(
-        tempfile.mkdtemp(prefix="rmbg_out_"),
-        os.path.splitext(os.path.basename(input_video))[0] + ".webm",
-    )
+    try:
+        if not validate_upload(input_video):
+            raise gr.Error("请先上传一个有效的视频文件（支持 .mp4, .webm, .mov, .avi, .mkv）")
 
-    result = process_video_web(
-        input_video, ffmpeg_path, ffprobe_path, output_path,
-        model=model, alpha_matting=alpha_matting,
-        fg_threshold=fg_threshold, bg_threshold=bg_threshold,
-        erode_size=erode_size, post_process_mask=post_process_mask,
-        crf=crf, speed=speed, alpha=not no_alpha, no_audio=no_audio,
-        test=test_mode, no_gpu=no_gpu,
-    )
-    return result
+        ffmpeg_path, ffprobe_path = check_ffmpeg_web()
+        if not ffmpeg_path:
+            raise gr.Error("服务器未找到 ffmpeg，请联系管理员")
+
+        output_path = os.path.join(
+            tempfile.mkdtemp(prefix="rmbg_out_"),
+            os.path.splitext(os.path.basename(input_video))[0] + ".webm",
+        )
+
+        result = process_video_web(
+            input_video, ffmpeg_path, ffprobe_path, output_path,
+            model=model, alpha_matting=alpha_matting,
+            fg_threshold=fg_threshold, bg_threshold=bg_threshold,
+            erode_size=erode_size, post_process_mask=post_process_mask,
+            crf=crf, speed=speed, alpha=not no_alpha, no_audio=no_audio,
+            test=test_mode, no_gpu=no_gpu,
+            cancel_event=cancel_event,
+        )
+        return result
+
+    except ProcessingCancelled:
+        raise gr.Error("处理已取消")
+
+    finally:
+        _current_cancel_event = None
+        _active_session_hash = None
 
 
 def create_interface():
@@ -276,6 +312,7 @@ def create_interface():
                     )
 
                 submit_btn = gr.Button("开始处理", variant="primary")
+                cancel_btn = gr.Button("取消处理", variant="stop")
 
             # 右侧：预览与下载
             with gr.Column(scale=1):
@@ -293,6 +330,13 @@ def create_interface():
                     crf, speed, no_alpha, no_audio, test_mode, no_gpu],
             outputs=output_video,
             concurrency_limit=1,
+        )
+
+        # 取消按钮：设置取消信号，在独立线程中运行
+        cancel_btn.click(
+            fn=cancel_processing,
+            inputs=[],
+            outputs=[],
         )
 
     demo.enable_queue = True

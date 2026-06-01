@@ -15,6 +15,7 @@ from rmbg_video.cli import (
     mux_audio,
     parse_args,
     process_video,
+    ProcessingCancelled,
 )
 
 from rmbg_video.web import (

@@ -210,7 +210,7 @@ class TestParamDefaults:
     def test_model_default(self):
         """Scenario: 模型默认值"""
         from rmbg_video.web import PARAM_DEFAULTS
-        assert PARAM_DEFAULTS["model"] == "birefnet-general"
+        assert PARAM_DEFAULTS["model"] == "bria-rmbg"
 
     def test_crf_default(self):
         """Scenario: CRF 默认值"""
@@ -324,7 +324,8 @@ class TestProcessVideoWeb:
                                width, height, fps, alpha_matting=True,
                                post_process_mask=False,
                                fg_threshold=240, bg_threshold=10, erode_size=10,
-                               crf=10, speed="good", alpha=True, max_frames=None):
+                               crf=10, speed="good", alpha=True, max_frames=None,
+                               cancel_event=None):
             process_calls.append({
                 "output_video": output_video,
                 "max_frames": max_frames,
@@ -608,3 +609,143 @@ class TestMainWebEntry:
         from rmbg_video.web import main
         # main 应正常运行不抛异常
         main()
+
+
+# === Task: 取消处理 ===
+# specs: cancel-processing / 取消按钮, 点击取消按钮发送信号, 无活动处理时点击取消,
+#        取消时显示错误通知, 取消后可开始新处理
+
+class TestCancelButton:
+    """取消按钮 UI 测试"""
+
+    def test_interface_has_cancel_button(self):
+        """Scenario: 界面包含两个按钮（提交 + 取消）"""
+        from rmbg_video.web import create_interface
+        import gradio as gr
+        demo = create_interface()
+        buttons = [b for b in demo.blocks.values() if isinstance(b, gr.Button)]
+        assert len(buttons) >= 2, f"至少需要两个按钮，实际找到 {len(buttons)} 个"
+
+
+class TestCancelProcessing:
+    """cancel_processing 函数测试"""
+
+    @pytest.fixture
+    def mock_request(self):
+        """创建模拟的 gr.Request 对象"""
+
+        class MockRequest:
+            def __init__(self, session_hash="test-session-abc"):
+                self.session_hash = session_hash
+
+        return MockRequest
+
+    def test_cancel_processing_function_exists(self):
+        """Scenario: cancel_processing 函数存在且可调用"""
+        from rmbg_video.web import cancel_processing
+        assert callable(cancel_processing)
+
+    def test_cancel_processing_noop_when_no_active(self, mock_request):
+        """Scenario: 无活动处理时取消 — 无错误，无操作"""
+        from rmbg_video import web
+        web._current_cancel_event = None
+        web._active_session_hash = None
+        web.cancel_processing(mock_request())
+
+    def test_cancel_processing_noop_for_different_session(self, mock_request):
+        """Scenario: 不同会话无法取消当前任务"""
+        import threading
+        from rmbg_video import web
+        event = threading.Event()
+        web._current_cancel_event = event
+        web._active_session_hash = "session-A"
+        # 使用不同的 session hash 调用取消
+        web.cancel_processing(mock_request(session_hash="session-B"))
+        assert not event.is_set(), "不同会话不应能设置取消信号"
+
+    def test_cancel_processing_sets_event_for_same_session(self, mock_request):
+        """Scenario: 相同会话可以取消当前任务"""
+        import threading
+        from rmbg_video import web
+        event = threading.Event()
+        web._current_cancel_event = event
+        web._active_session_hash = "session-A"
+        web.cancel_processing(mock_request(session_hash="session-A"))
+        assert event.is_set(), "相同会话应能设置取消信号"
+
+    def test_cancel_during_process_video_web(self, monkeypatch):
+        """Scenario: process_video_web 期间 cancel_event 已设置 → 抛出 ProcessingCancelled"""
+        import threading
+
+        def mock_get_video_info(ffprobe_path, input_video):
+            return (640, 480, 30.0, False)
+        monkeypatch.setattr("rmbg_video.cli.get_video_info", mock_get_video_info)
+
+        def mock_create_session(args):
+            return object()
+        monkeypatch.setattr("rmbg_video.cli.create_session", mock_create_session)
+
+        from rmbg_video.cli import ProcessingCancelled
+
+        def mock_process_video(*args, cancel_event=None, **kwargs):
+            if cancel_event is not None and cancel_event.is_set():
+                raise ProcessingCancelled()
+
+        monkeypatch.setattr("rmbg_video.cli.process_video", mock_process_video)
+
+        from rmbg_video.web import process_video_web
+        cancel_event = threading.Event()
+        cancel_event.set()
+
+        with pytest.raises(ProcessingCancelled):
+            process_video_web(
+                "/fake/input.mp4", "ffmpeg", "ffprobe",
+                "/fake/output.webm",
+                cancel_event=cancel_event,
+            )
+
+
+class TestHandleSubmitCancel:
+    """handle_submit 取消流程测试"""
+
+    @pytest.fixture
+    def mock_request(self):
+
+        class MockRequest:
+            session_hash = "test-session"
+
+        return MockRequest()
+
+    def test_handle_submit_resets_event_in_finally(self, monkeypatch, tmp_path, mock_request):
+        """Scenario: 取消后在 finally 中重置 _current_cancel_event 和 _active_session_hash"""
+        import threading
+        from rmbg_video import web
+        import gradio as gr
+
+        monkeypatch.setattr(web, "_current_cancel_event", threading.Event())
+
+        def mock_validate(path):
+            return True
+        monkeypatch.setattr(web, "validate_upload", mock_validate)
+
+        def mock_check():
+            return ("ffmpeg", "ffprobe")
+        monkeypatch.setattr(web, "check_ffmpeg_web", mock_check)
+
+        from rmbg_video.cli import ProcessingCancelled
+
+        def mock_process_video_web(*args, cancel_event=None, **kwargs):
+            raise ProcessingCancelled()
+        monkeypatch.setattr(web, "process_video_web", mock_process_video_web)
+
+        try:
+            web.handle_submit(
+                "input.mp4", "bria-rmbg", True, 240, 10, 10, False,
+                10, "good", False, False, False, False,
+                request=mock_request,
+            )
+        except gr.Error:
+            pass
+
+        assert web._current_cancel_event is None
+        assert web._active_session_hash is None

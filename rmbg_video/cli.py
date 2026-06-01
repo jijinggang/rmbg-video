@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 
 
 def parse_args(argv=None):
@@ -112,11 +113,16 @@ def create_session(args):
     return rembg.new_session(args.model, providers=providers)
 
 
+class ProcessingCancelled(Exception):
+    """用户取消视频处理时抛出，确保 finally 块完成资源清理。"""
+
+
 def process_video(ffmpeg_path, input_video, output_video, session,
                   width, height, fps, alpha_matting=True,
                   post_process_mask=False,
                   fg_threshold=240, bg_threshold=10, erode_size=10,
-                  crf=10, speed="good", alpha=True, max_frames=None):
+                  crf=10, speed="good", alpha=True, max_frames=None,
+                  cancel_event=None):
     """核心管道：解码帧 → rembg 处理 → 编码输出"""
     import rembg
     from tqdm import tqdm
@@ -162,6 +168,14 @@ def process_video(ffmpeg_path, input_video, output_video, session,
 
     try:
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                print("检测到取消信号，正在终止处理...")
+                decoder.kill()
+                encoder.kill()
+                decoder.stdout.close()
+                encoder.stdin.close()
+                raise ProcessingCancelled()
+
             raw = decoder.stdout.read(frame_size)
             if len(raw) < frame_size:
                 break

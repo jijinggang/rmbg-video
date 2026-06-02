@@ -51,7 +51,7 @@ PARAM_DEFAULTS = {
     "erode_size": 10,
     "post_process_mask": False,
     "crf": 10,
-    "speed": "good",
+    "speed": "best",
     "alpha": True,
     "no_audio": False,
     "test": False,
@@ -128,7 +128,7 @@ def get_or_create_session(model="birefnet-general", no_gpu=False):
 def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
                        temp_dir, model="birefnet-general", alpha_matting=True,
                        fg_threshold=240, bg_threshold=10, erode_size=10,
-                       post_process_mask=False, crf=10, speed="good",
+                       post_process_mask=False, crf=10, speed="best",
                        alpha=True, no_audio=False, test=False, no_gpu=False,
                        cancel_event=None, progress=None):
     """Web 端视频处理入口：编排 CLI 函数调用并管理临时文件。
@@ -193,7 +193,7 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
 
 def handle_submit(input_video, model, alpha_matting, fg_threshold,
                   bg_threshold, erode_size, post_process_mask,
-                  crf, speed, no_alpha, no_audio, test_mode, no_gpu,
+                  crf, no_alpha, no_audio, test_mode, no_gpu,
                   request: gr.Request):
     """Gradio 事件处理器：校验输入、准备路径、调用 process_video_web。"""
     import tempfile
@@ -226,7 +226,7 @@ def handle_submit(input_video, model, alpha_matting, fg_threshold,
             model=model, alpha_matting=alpha_matting,
             fg_threshold=fg_threshold, bg_threshold=bg_threshold,
             erode_size=erode_size, post_process_mask=post_process_mask,
-            crf=crf, speed=speed, alpha=not no_alpha, no_audio=no_audio,
+            crf=crf, speed="best", alpha=not no_alpha, no_audio=no_audio,
             test=test_mode, no_gpu=no_gpu,
             cancel_event=cancel_event,
         )
@@ -308,11 +308,6 @@ def create_interface():
                         choices=["bria-rmbg", "birefnet-general", "u2net", "isnet-general-use", "sam"],
                         value=PARAM_DEFAULTS["model"],
                     )
-                    speed = gr.Radio(
-                        label="编码速度",
-                        choices=["good", "best", "realtime"],
-                        value=PARAM_DEFAULTS["speed"],
-                    )
                     no_gpu = gr.Checkbox(
                         label="强制使用 CPU",
                         value=PARAM_DEFAULTS["no_gpu"],
@@ -334,7 +329,7 @@ def create_interface():
             fn=handle_submit,
             inputs=[video_input, model, alpha_matting, fg_threshold,
                     bg_threshold, erode_size, post_process_mask,
-                    crf, speed, no_alpha, no_audio, test_mode, no_gpu],
+                    crf, no_alpha, no_audio, test_mode, no_gpu],
             outputs=output_video,
             concurrency_limit=1,
         )

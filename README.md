@@ -75,7 +75,7 @@ python -m rmbg_video.web
 | `--erode-size` | `10` | 腐蚀尺寸 |
 | `--post-process-mask` | 否 | 对遮罩做后处理平滑 |
 | `--crf` | `10` | VP8 质量 0-63（越小越好） |
-| `--speed` | `good` | 编码速度预设 (good/best/realtime) |
+| `--speed` | `best` | 编码速度预设 (good/best/realtime) |
 | `--no-alpha` | 否 | 输出不含透明通道的普通 WebM |
 | `--no-audio` | 否 | 跳过音频处理 |
 | `--keep-temp` | 否 | 保留临时文件用于调试 |

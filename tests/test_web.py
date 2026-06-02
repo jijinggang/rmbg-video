@@ -220,7 +220,7 @@ class TestParamDefaults:
     def test_speed_default(self):
         """Scenario: speed 默认值"""
         from rmbg_video.web import PARAM_DEFAULTS
-        assert PARAM_DEFAULTS["speed"] == "good"
+        assert PARAM_DEFAULTS["speed"] == "best"
 
     def test_fg_threshold_default(self):
         """Scenario: 前景阈值默认值"""
@@ -747,7 +747,7 @@ class TestHandleSubmitCancel:
         try:
             web.handle_submit(
                 "input.mp4", "bria-rmbg", True, 240, 10, 10, False,
-                10, "good", False, False, False, False,
+                10, False, False, False, False,
                 request=mock_request,
             )
         except gr.Error:

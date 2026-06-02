@@ -28,7 +28,7 @@ class TestParseArgs:
         assert args.erode_size == 10
         assert args.post_process_mask is False
         assert args.crf == 10
-        assert args.speed == "good"
+        assert args.speed == "best"
         assert args.keep_temp is False
         assert args.ffmpeg_path is None
         assert args.no_audio is False

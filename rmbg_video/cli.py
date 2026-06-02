@@ -35,8 +35,8 @@ def parse_args(argv=None):
 
     parser.add_argument("--crf", type=int, default=10,
                         help="VP8 质量 0-63（默认: 10，越小越好）")
-    parser.add_argument("--speed", default="good", choices=("good", "best", "realtime"),
-                        help="编码速度预设（默认: good）")
+    parser.add_argument("--speed", default="best", choices=("good", "best", "realtime"),
+                        help="编码速度预设（默认: best）")
     parser.add_argument("--no-alpha", action="store_true",
                         help="输出不含透明通道的普通 WebM")
     parser.add_argument("--no-audio", action="store_true",
@@ -119,7 +119,7 @@ def process_video(ffmpeg_path, input_video, output_video, session,
                   width, height, fps, temp_dir, alpha_matting=True,
                   post_process_mask=False,
                   fg_threshold=240, bg_threshold=10, erode_size=10,
-                  crf=10, speed="good", alpha=True, max_frames=None,
+                  crf=10, speed="best", alpha=True, max_frames=None,
                   cancel_event=None):
     """帧提取到磁盘 → rembg 批量处理 → ffmpeg 合成视频"""
     import rembg

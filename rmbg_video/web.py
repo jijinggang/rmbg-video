@@ -126,7 +126,7 @@ def get_or_create_session(model="birefnet-general", no_gpu=False):
 
 
 def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
-                       model="birefnet-general", alpha_matting=True,
+                       temp_dir, model="birefnet-general", alpha_matting=True,
                        fg_threshold=240, bg_threshold=10, erode_size=10,
                        post_process_mask=False, crf=10, speed="good",
                        alpha=True, no_audio=False, test=False, no_gpu=False,
@@ -136,7 +136,6 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
     复用 rmbg_video.cli 中的 get_video_info, create_session, process_video,
     extract_audio, mux_audio。独立管理每个任务的临时目录。
     """
-    import tempfile
     from rmbg_video.cli import get_video_info
     from rmbg_video.cli import process_video as cli_process_video
     from rmbg_video.cli import extract_audio, mux_audio
@@ -146,7 +145,6 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
     session = get_or_create_session(model=model, no_gpu=no_gpu)
 
     os.makedirs(os.path.dirname(output_video) or ".", exist_ok=True)
-    temp_dir = tempfile.mkdtemp(prefix="rmbg_web_")
 
     try:
         audio_path = None
@@ -158,7 +156,7 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
 
         cli_process_video(
             ffmpeg_path, input_video, temp_video, session,
-            width, height, fps,
+            width, height, fps, temp_dir,
             alpha_matting=alpha_matting,
             post_process_mask=post_process_mask,
             fg_threshold=fg_threshold,
@@ -183,7 +181,14 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
         raise
     finally:
         import shutil
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        frames_dir = os.path.join(temp_dir, "frames")
+        shutil.rmtree(frames_dir, ignore_errors=True)
+        video_raw = os.path.join(temp_dir, "video_raw.webm")
+        #if os.path.isfile(video_raw):
+        #    os.remove(video_raw)
+        audio_opus = os.path.join(temp_dir, "audio.opus")
+        if os.path.isfile(audio_opus):
+            os.remove(audio_opus)
 
 
 def handle_submit(input_video, model, alpha_matting, fg_threshold,
@@ -209,13 +214,15 @@ def handle_submit(input_video, model, alpha_matting, fg_threshold,
         if not ffmpeg_path:
             raise gr.Error("服务器未找到 ffmpeg，请联系管理员")
 
+        temp_dir = tempfile.mkdtemp(prefix="rmbg_")
         output_path = os.path.join(
-            tempfile.mkdtemp(prefix="rmbg_out_"),
+            temp_dir,
             os.path.splitext(os.path.basename(input_video))[0] + ".webm",
         )
 
         result = process_video_web(
             input_video, ffmpeg_path, ffprobe_path, output_path,
+            temp_dir,
             model=model, alpha_matting=alpha_matting,
             fg_threshold=fg_threshold, bg_threshold=bg_threshold,
             erode_size=erode_size, post_process_mask=post_process_mask,

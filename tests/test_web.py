@@ -321,7 +321,7 @@ class TestProcessVideoWeb:
         # Mock process_video — 记录调用参数
         process_calls = []
         def mock_process_video(ffmpeg_path, input_video, output_video, session,
-                               width, height, fps, alpha_matting=True,
+                               width, height, fps, temp_dir, alpha_matting=True,
                                post_process_mask=False,
                                fg_threshold=240, bg_threshold=10, erode_size=10,
                                crf=10, speed="good", alpha=True, max_frames=None,
@@ -376,6 +376,7 @@ class TestProcessVideoWeb:
         result = process_video_web(
             input_video, "ffmpeg", "ffprobe",
             str(output_dir / "output.webm"),
+            str(tmp_path),
         )
         assert result is not None
         assert os.path.isfile(result)
@@ -390,6 +391,7 @@ class TestProcessVideoWeb:
         result = process_video_web(
             input_video, "ffmpeg", "ffprobe",
             str(tmp_path / "output.webm"),
+            str(tmp_path),
         )
         assert mock_deps["process_calls"]
         call = mock_deps["process_calls"][0]
@@ -404,7 +406,7 @@ class TestProcessVideoWeb:
 
         process_video_web(
             input_video, "ffmpeg", "ffprobe",
-            str(tmp_path / "output.webm"), test=True,
+            str(tmp_path / "output.webm"), str(tmp_path), test=True,
         )
         assert mock_deps["process_calls"]
         assert mock_deps["process_calls"][0]["max_frames"] == 5
@@ -418,7 +420,7 @@ class TestProcessVideoWeb:
 
         process_video_web(
             input_video, "ffmpeg", "ffprobe",
-            str(tmp_path / "output.webm"), test=False,
+            str(tmp_path / "output.webm"), str(tmp_path), test=False,
         )
         assert mock_deps["process_calls"]
         assert mock_deps["process_calls"][0]["max_frames"] is None
@@ -433,6 +435,7 @@ class TestProcessVideoWeb:
         process_video_web(
             input_video, "ffmpeg", "ffprobe",
             str(tmp_path / "output.webm"),
+            str(tmp_path),
         )
         assert mock_deps["audio_calls"]
 
@@ -445,7 +448,7 @@ class TestProcessVideoWeb:
 
         process_video_web(
             input_video, "ffmpeg", "ffprobe",
-            str(tmp_path / "output.webm"), no_audio=True,
+            str(tmp_path / "output.webm"), str(tmp_path), no_audio=True,
         )
         assert mock_deps["mux_calls"] == []  # 没有混流
 
@@ -458,7 +461,7 @@ class TestProcessVideoWeb:
 
         process_video_web(
             input_video, "ffmpeg", "ffprobe",
-            str(tmp_path / "output.webm"),
+            str(tmp_path / "output.webm"), str(tmp_path),
             alpha_matting=False, fg_threshold=200, bg_threshold=20, erode_size=15,
             post_process_mask=True, crf=5, speed="realtime", alpha=False,
         )
@@ -476,7 +479,7 @@ class TestProcessVideoWeb:
             f.write(b"fake-video")
         output_path = str(tmp_path / "nested" / "output.webm")
 
-        process_video_web(input_video, "ffmpeg", "ffprobe", output_path)
+        process_video_web(input_video, "ffmpeg", "ffprobe", output_path, str(tmp_path))
         assert os.path.isdir(os.path.dirname(output_path))
 
     def test_process_video_cleans_temp_files(self, mock_deps, tmp_path):
@@ -489,6 +492,7 @@ class TestProcessVideoWeb:
         result = process_video_web(
             input_video, "ffmpeg", "ffprobe",
             str(tmp_path / "output.webm"),
+            str(tmp_path),
         )
         # 临时目录应已被清理
         assert result is not None
@@ -513,6 +517,7 @@ class TestProcessVideoWeb:
             process_video_web(
                 input_video, "ffmpeg", "ffprobe",
                 str(tmp_path / "output.webm"),
+                str(tmp_path),
             )
 
 
@@ -701,6 +706,7 @@ class TestCancelProcessing:
             process_video_web(
                 "/fake/input.mp4", "ffmpeg", "ffprobe",
                 "/fake/output.webm",
+                "/fake/temp",
                 cancel_event=cancel_event,
             )
 

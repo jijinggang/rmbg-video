@@ -116,24 +116,23 @@ class ProcessingCancelled(Exception):
 
 
 def process_video(ffmpeg_path, input_video, output_video, session,
-                  width, height, fps, alpha_matting=True,
+                  width, height, fps, temp_dir, alpha_matting=True,
                   post_process_mask=False,
                   fg_threshold=240, bg_threshold=10, erode_size=10,
                   crf=10, speed="good", alpha=True, max_frames=None,
                   cancel_event=None):
     """帧提取到磁盘 → rembg 批量处理 → ffmpeg 合成视频"""
     import rembg
-    import tempfile
     from tqdm import tqdm
 
     if cancel_event is not None and cancel_event.is_set():
         raise ProcessingCancelled()
 
-    temp_dir = tempfile.mkdtemp(prefix="rmbg_frames_")
-    src_dir = os.path.join(temp_dir, "src")
-    dest_dir = os.path.join(temp_dir, "dest")
-    os.makedirs(src_dir)
-    os.makedirs(dest_dir)
+    frames_dir = os.path.join(temp_dir, "frames")
+    src_dir = os.path.join(frames_dir, "src")
+    dest_dir = os.path.join(frames_dir, "dest")
+    os.makedirs(src_dir, exist_ok=True)
+    os.makedirs(dest_dir, exist_ok=True)
 
     frameno = 0
 
@@ -204,7 +203,7 @@ def process_video(ffmpeg_path, input_video, output_video, session,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        shutil.rmtree(frames_dir, ignore_errors=True)
 
     print(f"处理完成：{frameno} 帧")
 
@@ -260,7 +259,7 @@ def main():
     session = create_session(args)
 
     import tempfile
-    temp_dir = tempfile.mkdtemp(prefix="rmbg_video_")
+    temp_dir = tempfile.mkdtemp(prefix="rmbg_")
     print(f"临时目录: {temp_dir}")
 
     try:
@@ -279,7 +278,7 @@ def main():
         temp_video = os.path.join(temp_dir, "video_raw.webm")
         process_video(
             ffmpeg, args.input, temp_video, session,
-            width, height, fps,
+            width, height, fps, temp_dir,
             alpha_matting=not args.no_alpha_matting,
             post_process_mask=args.post_process_mask,
             fg_threshold=args.fg_threshold,

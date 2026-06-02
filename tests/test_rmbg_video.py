@@ -358,6 +358,7 @@ class TestProcessVideo:
     def mock_setup(self, monkeypatch):
         """设置测试 fixtures"""
         import numpy as np
+        import tempfile
 
         # 创建测试帧数据 (RGBA)
         test_frame = np.zeros((480, 640, 4), dtype=np.uint8)
@@ -374,9 +375,12 @@ class TestProcessVideo:
             result[:, :, 3] = 128  # 半透明 alpha
             return result
 
+        temp_dir = tempfile.mkdtemp(prefix="test_rmbg_")
+
         return {
             "test_frame": test_frame,
             "mock_remove": mock_remove,
+            "temp_dir": temp_dir,
         }
 
     def test_decoder_pipe_command(self, monkeypatch, mock_setup):
@@ -400,7 +404,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, crf=10, speed="good", alpha=True)
         decoder_cmd = " ".join(decoder_cmds[0])
         assert "-f rawvideo" in decoder_cmd
@@ -429,7 +433,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, crf=10, speed="good", alpha=True)
         encoder_cmd = " ".join(encoder_cmds[0])
         assert "-c:v libvpx" in encoder_cmd
@@ -459,7 +463,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, crf=10, speed="good", alpha=False)
         encoder_cmd = " ".join(encoder_cmds[0])
         assert "yuv420p" in encoder_cmd
@@ -494,7 +498,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, crf=10, speed="good", alpha=True)
         assert remove_calls
         call = remove_calls[0]
@@ -532,7 +536,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=False, crf=10, speed="good", alpha=True)
         assert remove_calls
         assert remove_calls[0]["alpha_matting"] is False
@@ -566,7 +570,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, post_process_mask=True, crf=10, speed="good", alpha=True)
         assert remove_calls
         assert remove_calls[0]["post_process_mask"] is True
@@ -603,7 +607,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, fg_threshold=230, bg_threshold=20, erode_size=15,
                       crf=10, speed="good", alpha=True)
         assert remove_calls
@@ -636,7 +640,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, crf=5, speed="realtime", alpha=True)
         encoder_cmd = " ".join(encoder_cmds[0])
         assert "-crf 5" in encoder_cmd
@@ -668,7 +672,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, crf=10, speed="good", alpha=True)
         assert tqdm_calls
         assert tqdm_calls[0]["unit"] == "帧"
@@ -711,7 +715,7 @@ class TestProcessVideo:
         from rmbg_video import parse_args, process_video
         args = parse_args()
         session = object()
-        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0,
+        process_video("ffmpeg", args.input, "/tmp/out.webm", session, 640, 480, 30.0, mock_setup["temp_dir"],
                       alpha_matting=True, crf=10, speed="good", alpha=True)
         assert len(remove_calls) == 3
         encoder_output = encoder_written.tobytes()
@@ -896,6 +900,7 @@ class TestProcessVideoCancel:
         import rembg
         import tqdm
         import threading
+        import tempfile
 
         monkeypatch.setattr(rembg, "remove", lambda data, **kwargs: data)
         monkeypatch.setattr(tqdm, "tqdm", lambda **kw: FakePbar())
@@ -925,7 +930,7 @@ class TestProcessVideoCancel:
         try:
             with pytest.raises(ProcessingCancelled):
                 process_video("ffmpeg", args.input, "/tmp/out.webm", session,
-                              640, 480, 30.0, cancel_event=cancel_event)
+                              640, 480, 30.0, tempfile.mkdtemp(prefix="test_rmbg_"), cancel_event=cancel_event)
         finally:
             timer.cancel()
 
@@ -935,6 +940,7 @@ class TestProcessVideoCancel:
         import rembg
         import tqdm
         import threading
+        import tempfile
 
         monkeypatch.setattr(rembg, "remove", lambda data, **kwargs: data)
         monkeypatch.setattr(tqdm, "tqdm", lambda **kw: FakePbar())
@@ -957,13 +963,14 @@ class TestProcessVideoCancel:
         session = object()
         with pytest.raises(ProcessingCancelled):
             process_video("ffmpeg", args.input, "/tmp/out.webm", session,
-                          640, 480, 30.0, cancel_event=cancel_event)
+                          640, 480, 30.0, tempfile.mkdtemp(prefix="test_rmbg_"), cancel_event=cancel_event)
 
     def test_no_cancel_event_passed(self, monkeypatch):
         """Scenario: 未传 cancel_event（CLI 模式）→ 正常完成不抛异常"""
         import numpy as np
         import rembg
         import tqdm
+        import tempfile
 
         monkeypatch.setattr(rembg, "remove", lambda data, **kwargs: data)
         monkeypatch.setattr(tqdm, "tqdm", lambda **kw: FakePbar())
@@ -983,4 +990,4 @@ class TestProcessVideoCancel:
         session = object()
         # 应无异常完成
         process_video("ffmpeg", args.input, "/tmp/out.webm", session,
-                      640, 480, 30.0)
+                      640, 480, 30.0, tempfile.mkdtemp(prefix="test_rmbg_"))

@@ -479,3 +479,84 @@ class TestProcessingCancelled:
             raise ProcessingCancelled("测试取消")
 
 
+# === Task 1.1: process_video keep_frames 参数 ===
+# specs: frames-zip-download / CLI 模式行为不变
+
+class TestProcessVideoKeepFrames:
+    """process_video keep_frames 参数测试"""
+
+    @pytest.fixture
+    def mock_ffmpeg_and_rembg(self, monkeypatch, tmp_path):
+        """创建 mock 环境和假帧文件，返回 (temp_dir, frames_dir)"""
+        import rembg
+        import tqdm as tqdm_module
+
+        # Mock subprocess.run for ffmpeg extract/encode
+        def mock_run(cmd, check, **kwargs):
+            return subprocess.CompletedProcess([], 0)
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        # Mock rembg.remove to return input unchanged
+        def mock_remove(frame_bytes, session=None, **kwargs):
+            return frame_bytes
+        monkeypatch.setattr(rembg, "remove", mock_remove)
+
+        # Mock tqdm to avoid progress bar output
+        class MockTqdm:
+            def __init__(self, iterable, **kwargs):
+                self._iter = iter(iterable)
+            def __iter__(self):
+                return self
+            def __next__(self):
+                return next(self._iter)
+            def close(self):
+                pass
+            def set_description(self, *a, **kw):
+                pass
+        monkeypatch.setattr(tqdm_module, "tqdm", MockTqdm)
+
+        temp_dir = str(tmp_path)
+        frames_dir = os.path.join(temp_dir, "frames")
+        src_dir = os.path.join(frames_dir, "src")
+        dest_dir = os.path.join(frames_dir, "dest")
+        os.makedirs(src_dir)
+        os.makedirs(dest_dir)
+
+        # Create fake frame files
+        for i in range(1, 4):
+            fname = f"{i:08d}.png"
+            with open(os.path.join(src_dir, fname), "wb") as f:
+                f.write(b"fake-png-data")
+
+        return temp_dir, frames_dir
+
+    def test_keep_frames_true_preserves_dir(self, mock_ffmpeg_and_rembg):
+        """Scenario: keep_frames=True 时 frames_dir 不被删除"""
+        from rmbg_video.cli import process_video
+
+        temp_dir, frames_dir = mock_ffmpeg_and_rembg
+
+        process_video(
+            "ffmpeg", os.path.join(temp_dir, "input.mp4"),
+            os.path.join(temp_dir, "output.webm"),
+            object(), 640, 480, 30.0, temp_dir,
+            keep_frames=True,
+        )
+
+        assert os.path.isdir(frames_dir), "keep_frames=True 时 frames_dir 应保留"
+
+    def test_keep_frames_false_deletes_dir(self, mock_ffmpeg_and_rembg):
+        """Scenario: keep_frames=False（默认）时 frames_dir 被删除"""
+        from rmbg_video.cli import process_video
+
+        temp_dir, frames_dir = mock_ffmpeg_and_rembg
+
+        process_video(
+            "ffmpeg", os.path.join(temp_dir, "input.mp4"),
+            os.path.join(temp_dir, "output.webm"),
+            object(), 640, 480, 30.0, temp_dir,
+        )
+
+        assert not os.path.isdir(frames_dir), "keep_frames=False 时 frames_dir 应被删除"
+
+

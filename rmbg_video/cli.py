@@ -120,7 +120,7 @@ def process_video(ffmpeg_path, input_video, output_video, session,
                   post_process_mask=False,
                   fg_threshold=240, bg_threshold=10, erode_size=10,
                   crf=10, speed="best", alpha=True, max_frames=None,
-                  cancel_event=None):
+                  cancel_event=None, keep_frames=False):
     """帧提取到磁盘 → rembg 批量处理 → ffmpeg 合成视频"""
     import rembg
     from tqdm import tqdm
@@ -203,7 +203,8 @@ def process_video(ffmpeg_path, input_video, output_video, session,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     finally:
-        shutil.rmtree(frames_dir, ignore_errors=True)
+        if not keep_frames:
+            shutil.rmtree(frames_dir, ignore_errors=True)
 
     print(f"处理完成：{frameno} 帧")
 

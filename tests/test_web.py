@@ -296,6 +296,30 @@ class TestInterfaceComponents:
         has_video = any(isinstance(b, gr.Video) for b in demo.blocks.values())
         assert has_video
 
+    def test_interface_has_zip_file_output(self):
+        """Scenario: 界面包含 ZIP 文件下载组件（除上传组件外还有 gr.File）"""
+        from rmbg_video.web import create_interface
+        import gradio as gr
+        demo = create_interface()
+        file_components = [b for b in demo.blocks.values() if isinstance(b, gr.File)]
+        assert len(file_components) >= 2, f"需要至少 2 个 File 组件（上传 + ZIP 下载），实际 {len(file_components)}"
+
+    def test_interface_has_download_button(self):
+        """Scenario: 界面包含 DownloadButton 用于视频下载"""
+        from rmbg_video.web import create_interface
+        import gradio as gr
+        demo = create_interface()
+        has_download_btn = any(isinstance(b, gr.DownloadButton) for b in demo.blocks.values())
+        assert has_download_btn, "界面应包含 gr.DownloadButton"
+
+    def test_interface_has_state(self):
+        """Scenario: 界面包含 gr.State 用于存储视频路径"""
+        from rmbg_video.web import create_interface
+        import gradio as gr
+        demo = create_interface()
+        has_state = any(isinstance(b, gr.State) for b in demo.blocks.values())
+        assert has_state, "界面应包含 gr.State"
+
 
 # === Task 4.1: process_video_web 核心处理函数 ===
 # specs: web-interface / 处理进度显示, queue-management / 临时文件隔离
@@ -325,7 +349,7 @@ class TestProcessVideoWeb:
                                post_process_mask=False,
                                fg_threshold=240, bg_threshold=10, erode_size=10,
                                crf=10, speed="good", alpha=True, max_frames=None,
-                               cancel_event=None):
+                               cancel_event=None, keep_frames=False):
             process_calls.append({
                 "output_video": output_video,
                 "max_frames": max_frames,
@@ -333,6 +357,7 @@ class TestProcessVideoWeb:
                 "crf": crf,
                 "speed": speed,
                 "alpha": alpha,
+                "keep_frames": keep_frames,
             })
             _os.makedirs(_os.path.dirname(output_video) if _os.path.dirname(output_video) else ".", exist_ok=True)
             with open(output_video, "wb") as f:
@@ -519,6 +544,35 @@ class TestProcessVideoWeb:
                 str(tmp_path / "output.webm"),
                 str(tmp_path),
             )
+
+    def test_process_video_web_keep_frames_true(self, mock_deps, tmp_path):
+        """Scenario: keep_frames=True 正确透传至 cli_process_video()"""
+        from rmbg_video.web import process_video_web
+        input_video = str(tmp_path / "input.mp4")
+        with open(input_video, "wb") as f:
+            f.write(b"fake-video")
+
+        process_video_web(
+            input_video, "ffmpeg", "ffprobe",
+            str(tmp_path / "output.webm"), str(tmp_path),
+            keep_frames=True,
+        )
+        assert mock_deps["process_calls"]
+        assert mock_deps["process_calls"][0]["keep_frames"] is True
+
+    def test_process_video_web_keep_frames_default(self, mock_deps, tmp_path):
+        """Scenario: keep_frames 默认值为 False"""
+        from rmbg_video.web import process_video_web
+        input_video = str(tmp_path / "input.mp4")
+        with open(input_video, "wb") as f:
+            f.write(b"fake-video")
+
+        process_video_web(
+            input_video, "ffmpeg", "ffprobe",
+            str(tmp_path / "output.webm"), str(tmp_path),
+        )
+        assert mock_deps["process_calls"]
+        assert mock_deps["process_calls"][0]["keep_frames"] is False
 
 
 # === Task 5.1 & 5.3: 排队机制 ===
@@ -755,3 +809,102 @@ class TestHandleSubmitCancel:
 
         assert web._current_cancel_event is None
         assert web._active_session_hash is None
+
+
+# === Task 3.1 & 3.2: handle_submit ZIP 生成 ===
+# specs: frames-zip-download / 处理完成后提供序列帧 ZIP 下载
+
+class TestHandleSubmitZip:
+    """handle_submit ZIP 生成测试"""
+
+    @pytest.fixture
+    def mock_request(self):
+        class MockRequest:
+            session_hash = "test-session"
+        return MockRequest()
+
+    @pytest.fixture
+    def mock_zip_deps(self, monkeypatch, tmp_path):
+        """Mock handle_submit 依赖，创建假帧和视频文件"""
+        from rmbg_video import web
+
+        # Mock validate_upload
+        monkeypatch.setattr(web, "validate_upload", lambda path: True)
+
+        # Mock check_ffmpeg_web
+        monkeypatch.setattr(web, "check_ffmpeg_web", lambda: ("ffmpeg", "ffprobe"))
+
+        # Mock tempfile.mkdtemp to return a predictable path
+        temp_dir = str(tmp_path)
+        monkeypatch.setattr("tempfile.mkdtemp", lambda prefix="": temp_dir)
+
+        # Mock process_video_web to create fake output and frames
+        def mock_process_video_web(input_video, ffmpeg_path, ffprobe_path,
+                                     output_video, temp_dir, **kwargs):
+            # Create the output video file
+            video_dir = os.path.dirname(output_video)
+            if video_dir:
+                os.makedirs(video_dir, exist_ok=True)
+            with open(output_video, "wb") as f:
+                f.write(b"fake-webm-data")
+
+            # Create fake frames/dest/ with PNG files
+            dest_dir = os.path.join(temp_dir, "frames", "dest")
+            os.makedirs(dest_dir, exist_ok=True)
+            for i in range(1, 4):
+                fname = f"{i:08d}.png"
+                with open(os.path.join(dest_dir, fname), "wb") as f:
+                    f.write(b"fake-png-data")
+
+            return output_video
+
+        monkeypatch.setattr(web, "process_video_web", mock_process_video_web)
+
+        return temp_dir
+
+    def test_handle_submit_generates_zip(self, mock_zip_deps, mock_request):
+        """Scenario: 处理完成后生成 {原视频名}_frames.zip"""
+        from rmbg_video.web import handle_submit
+        import zipfile
+
+        result = handle_submit(
+            os.path.join(mock_zip_deps, "test.mp4"),
+            "bria-rmbg", True, 240, 10, 10, False,
+            10, False, False, False, False,
+            request=mock_request,
+        )
+
+        # 应返回 (video_path, zip_path, video_state) 元组
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+        video_path, zip_path, state_path = result
+
+        # state 应与 video_path 相同
+        assert state_path == video_path
+
+        # ZIP 文件应存在
+        assert os.path.isfile(zip_path)
+        assert zip_path.endswith("_frames.zip")
+
+        # ZIP 应包含正确的帧文件
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            assert len(names) == 3
+            assert "00000001.png" in names
+            assert "00000002.png" in names
+            assert "00000003.png" in names
+
+    def test_handle_submit_cleans_frames_after_zip(self, mock_zip_deps, mock_request):
+        """Scenario: ZIP 生成后 frames_dir 被清理"""
+        from rmbg_video.web import handle_submit
+
+        handle_submit(
+            os.path.join(mock_zip_deps, "test.mp4"),
+            "bria-rmbg", True, 240, 10, 10, False,
+            10, False, False, False, False,
+            request=mock_request,
+        )
+
+        # frames_dir 应被清理
+        frames_dir = os.path.join(mock_zip_deps, "frames")
+        assert not os.path.exists(frames_dir), "frames_dir 应在 ZIP 生成后被清理"

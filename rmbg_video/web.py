@@ -130,7 +130,7 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
                        fg_threshold=240, bg_threshold=10, erode_size=10,
                        post_process_mask=False, crf=10, speed="best",
                        alpha=True, no_audio=False, test=False, no_gpu=False,
-                       cancel_event=None, progress=None):
+                       cancel_event=None, progress=None, keep_frames=False):
     """Web 端视频处理入口：编排 CLI 函数调用并管理临时文件。
 
     复用 rmbg_video.cli 中的 get_video_info, create_session, process_video,
@@ -167,6 +167,7 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
             alpha=alpha,
             max_frames=max_frames,
             cancel_event=cancel_event,
+            keep_frames=keep_frames,
         )
 
         if audio_path:
@@ -181,11 +182,9 @@ def process_video_web(input_video, ffmpeg_path, ffprobe_path, output_video,
         raise
     finally:
         import shutil
-        frames_dir = os.path.join(temp_dir, "frames")
-        shutil.rmtree(frames_dir, ignore_errors=True)
         video_raw = os.path.join(temp_dir, "video_raw.webm")
-        #if os.path.isfile(video_raw):
-        #    os.remove(video_raw)
+        if os.path.isfile(video_raw):
+            os.remove(video_raw)
         audio_opus = os.path.join(temp_dir, "audio.opus")
         if os.path.isfile(audio_opus):
             os.remove(audio_opus)
@@ -229,8 +228,20 @@ def handle_submit(input_video, model, alpha_matting, fg_threshold,
             crf=crf, speed="best", alpha=not no_alpha, no_audio=no_audio,
             test=test_mode, no_gpu=no_gpu,
             cancel_event=cancel_event,
+            keep_frames=True,
         )
-        return result
+
+        import zipfile
+        dest_dir = os.path.join(temp_dir, "frames", "dest")
+        zip_name = os.path.splitext(os.path.basename(input_video))[0] + "_frames.zip"
+        zip_path = os.path.join(temp_dir, zip_name)
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for fname in sorted(os.listdir(dest_dir)):
+                zf.write(os.path.join(dest_dir, fname), fname)
+
+        shutil.rmtree(os.path.join(temp_dir, "frames"), ignore_errors=True)
+
+        return result, zip_path, result
 
     except ProcessingCancelled:
         raise gr.Error("处理已取消")
@@ -322,7 +333,9 @@ def create_interface():
                     label="处理结果",
                     elem_classes=["checkerboard-bg"],
                 )
-                download_btn = gr.Button("下载视频")
+                video_state = gr.State()
+                download_btn = gr.DownloadButton("下载视频")
+                zip_output = gr.File(label="下载序列帧 (ZIP)")
 
         # 事件绑定：按钮点击 → 处理视频（concurrency_limit=1 确保排队）
         submit_btn.click(
@@ -330,8 +343,20 @@ def create_interface():
             inputs=[video_input, model, alpha_matting, fg_threshold,
                     bg_threshold, erode_size, post_process_mask,
                     crf, no_alpha, no_audio, test_mode, no_gpu],
-            outputs=output_video,
+            outputs=[output_video, zip_output, video_state],
             concurrency_limit=1,
+        )
+
+        # 下载视频按钮：从 State 读取视频路径触发下载
+        def download_video(video_path):
+            if video_path and os.path.isfile(video_path):
+                return video_path
+            return None
+
+        download_btn.click(
+            fn=download_video,
+            inputs=video_state,
+            outputs=download_btn,
         )
 
         # 取消按钮：设置取消信号，在独立线程中运行

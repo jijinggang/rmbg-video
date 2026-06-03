@@ -7,6 +7,12 @@
 - Python >= 3.9
 - ffmpeg 和 ffprobe 已安装并在 PATH 中
 
+## 适用场景
+
+本仓库适合去除各种正常背景的视频，如果是绿幕/蓝幕背景，使用以下项目效果更好
+- https://huggingface.co/spaces/Luminia/CorridorKey
+- https://github.com/ctemple/CorridorKey  
+
 ## 安装
 
 ```bash
